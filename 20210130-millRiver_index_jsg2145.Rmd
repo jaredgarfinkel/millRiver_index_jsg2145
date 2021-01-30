@@ -1,0 +1,249 @@
+---
+title: "20210130-millRiver_index_jsg2145"
+author: "Jared Garfinkel"
+date: "1/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(viridis)
+library(readxl)
+library(corrplot)
+library(factoextra)
+library(gridExtra)
+library(psych)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE,
+	fig.width = 12, 
+  fig.height = 14,
+  out.width = "90%"
+)
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+```
+
+# read in data
+
+```{r}
+data = readxl::read_excel("./data/Index_Dataset_01-26-21 (1).xlsx") %>% 
+  janitor::clean_names()
+
+skimr::skim(data)
+```
+
+This dataset is `r nrow(data)` rows by `r ncol(data)` columns. There are 35 indicators including 5 summary statistics, "overall_resilience", "health", "diversity", "social", and "environmental". These summary statistics are removed for analysis. 
+
+There is no missing data.
+
+```{r}
+data = data %>% 
+  select(-overall_resilience, -health, -diversity, -social, -environmental)
+```
+
+# Exploratory Data Analysis
+
+## conduct a correlation analysis
+
+```{r, fig.height = 12, fig.width = 10}
+M = cor(data[,-1])
+# ?corrplot
+corrplot(M, type = c("upper"), order = c("hclust"))
+```
+
+There are several race/ethnicity variables that are correlated with each other and economic- and education-related variables.
+
+It will be easier to examine highly correlated variables using a cutoff to view those correlations.
+
+We start with a cutoff of Pearson's R-squared $\ge$ 0.7, which results in the following:
+
+```{r}
+output = vector(mode = "list", length = ncol(M))
+rname = NULL
+cname = NULL
+for(i in 1:nrow(M)) {
+  for(j in 1:ncol(M)) {
+    rname[[i]] = dimnames(M)[[c(1, i)]]
+    cname[[j]] = dimnames(M)[[c(2, j)]]
+    output[[c(i, j)]] = tibble_row(i, j, rname[[i]], cname[[j]], M[[i, j]])
+  }
+}
+```
+
+```{r, result = "hide"}
+matrify = function(pdata = output) {
+  for(i in 1:ncol(M)) {
+      result[[i]] = tibble(pdata[[c(i, i)]])
+  }
+  result = bind_rows(result)
+  return(result)
+}
+```
+
+# Matrify 2
+
+```{r}
+matrify2 = function(pdata = output) {
+  result = NULL
+  for(i in 1:length(pdata)) {
+      result[[i]] = tibble(pdata[[i]])
+  }
+  result = bind_rows(result)
+  return(result)
+}
+
+df2 = vector(mode = "list", length = ncol(M))
+for(j in 1:ncol(M)) {
+  df2[[j]] = matrify2(pdata = output[[j]])
+}
+
+head(df2)
+```
+
+```{r}
+union_df = bind_rows(df2) %>% 
+  rename("r2_value" = "M[[i, j]]",
+         "column" = "cname[[j]]",
+         "row" = "rname[[i]]")
+```
+
+
+```{r}
+high_df = union_df %>% 
+  filter(r2_value >= 0.7,
+         r2_value != 1,
+         i < j)
+
+high_df
+```
+
+
+```{r}
+very_high_df = union_df %>% 
+  filter(r2_value >= 0.8,
+         r2_value != 1,
+         i < j)
+very_high_df
+```
+
+The indicators teen_pregnancy and asthma are unexpectedly very highly correlated.
+
+# Unsupervised learning
+
+```{r}
+df = scale(data[,-1])
+```
+
+
+## Principal Component Analysis
+
+### prcomp
+
+```{r}
+pca1 = prcomp(df)
+fviz_eig(pca1)
+```
+
+```{r}
+a = fviz_contrib(pca1, choice = "var", axes = 1) 
+b = fviz_contrib(pca1, choice = "var", axes = 2) 
+grid.arrange(a, b, nrow = 2)
+```
+
+```{r}
+biplot(pca1)
+```
+
+
+### fa.parallel
+
+```{r}
+set.seed(719)
+fa.parallel(df) # parallel analysis suggests the number of factors = 4, and the number of components = 3
+```
+
+### principal
+
+```{r}
+fit = principal(M, nfactors = 4, rotate = "varimax")
+fit
+```
+
+### iclust
+
+```{r, fig.height = 16, fig.width = 14}
+# ?iclust
+# pdf()
+fit2 = iclust(M, plot = TRUE)
+# dev.off()
+fit2
+```
+
+## Clustering
+
+Further  methods in unsupervised learning
+
+```{r}
+# ?fviz_nbclust
+fviz_nbclust(df,
+             FUNcluster = kmeans,
+             method = "silhouette")
+```
+
+```{r}
+set.seed(719)
+km <- kmeans(df, centers = 2)
+```
+
+```{r}
+output2 = NULL
+for(i in 1:length(km$cluster)) {
+  output2[[i]] = tibble(km$cluster[[i]])
+}
+
+output2_df = bind_rows(output2) %>% 
+  rename("cluster" = "km$cluster[[i]]")
+```
+
+```{r}
+data %>% 
+  add_column(cluster = pull(output2_df, cluster)) %>% 
+  select(cluster, community) %>% 
+  arrange(cluster)
+```
+
+```{r, fig.height = 12, fig.width = 14}
+# ?fviz_cluster
+km_vis <- fviz_cluster(list(data = df, cluster = km$cluster),
+                       ellipse.type = "convex", 
+                       geom = c("point","text"),
+                       labelsize = 10) + 
+  labs(title = "K-means") 
+
+km_vis
+```
+
+# Hierarchical Clustering
+
+```{r}
+hc.complete <- hclust(dist(scale(data[,-1])), method = "complete")
+
+fviz_dend(hc.complete, k = 2,        
+          cex = 0.5, 
+          palette = "jco", 
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+
+# ?fviz_dend
+
+ind4.complete <- cutree(hc.complete, 2)
+```
+
