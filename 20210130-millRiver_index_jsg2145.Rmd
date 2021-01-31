@@ -13,6 +13,7 @@ library(corrplot)
 library(factoextra)
 library(gridExtra)
 library(psych)
+library(caret)
 knitr::opts_chunk$set(
 	echo = TRUE,
 	warning = FALSE,
@@ -246,4 +247,6 @@ fviz_dend(hc.complete, k = 2,
 
 ind4.complete <- cutree(hc.complete, 2)
 ```
+
+# variance importance in caret
 
