@@ -1,0 +1,89 @@
+---
+title: "20210204-millRiver_indexPCA_jsg2145"
+author: "Jared Garfinkel"
+date: "2/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(viridis)
+library(readxl)
+library(corrplot)
+library(factoextra)
+library(gridExtra)
+library(psych)
+library(caret)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE,
+	fig.width = 12, 
+  fig.height = 14,
+  out.width = "90%"
+)
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+```
+
+# read in data
+
+```{r}
+data = readxl::read_excel("./data/Index_Dataset_01-26-21 (1).xlsx") %>% 
+  janitor::clean_names()
+
+skimr::skim(data)
+```
+
+This dataset is `r nrow(data)` rows by `r ncol(data)` columns. There are 35 indicators including 5 summary statistics, "overall_resilience", "health", "diversity", "social", and "environmental". These summary statistics are removed for analysis. 
+
+There is no missing data.
+
+```{r}
+data = data %>% 
+  select(-overall_resilience, -health, -economic, -social, -environmental)
+```
+
+```{r}
+# ?fa.parallel
+set.seed(719)
+indexparallel = fa.parallel(data[,-1], fa = "both") # Parallel analysis suggests that the number of factors =  4  and the number of components =  2 
+```
+
+```{r}
+indexparallel$pc.values
+indexparallel$pc.sim
+```
+
+```{r}
+indexalpha = alpha(data[,-1])
+indexalpha
+```
+
+# Exploratory Factor Analysis
+
+```{r}
+set.seed(719)
+res = fa(data[,-1], 4, cor = "cor", rotate = "geominQ", fm = "ml")
+res
+print.psych(res, digits = 2, sort = TRUE)
+top10 = c("poverty", "hs_drop_out_rates", "insured", "food_assistance", "teen_pregnancy", "employment", "diversity", "car", "income", "no_internet")
+```
+
+```{r, fig.height = 12}
+fa.diagram(res, digits = 2)
+```
+
+```{r, fig.height = 14, fig.width = 12}
+# ?iclust
+iclust(data[,-1], nclusters = 4)
+```
+
+
+
+

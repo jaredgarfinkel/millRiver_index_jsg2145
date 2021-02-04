@@ -34,10 +34,11 @@ theme_set(theme_minimal() + theme(legend.position = "bottom"))
 # read in data
 
 ```{r}
-data = readxl::read_excel("./data/Index_Dataset_01-26-21 (1).xlsx") %>% 
-  janitor::clean_names()
+df = readxl::read_excel("./data/Index_Dataset_01-26-21 (1).xlsx") %>% 
+  janitor::clean_names() %>% 
+  select(overall_resilience, everything())
 
-skimr::skim(data)
+skimr::skim(df)
 ```
 
 This dataset is `r nrow(data)` rows by `r ncol(data)` columns. There are 35 indicators including 5 summary statistics, "overall_resilience", "health", "diversity", "social", and "environmental". These summary statistics are removed for analysis. 
@@ -45,7 +46,7 @@ This dataset is `r nrow(data)` rows by `r ncol(data)` columns. There are 35 indi
 There is no missing data.
 
 ```{r}
-data = data %>% 
+data = df %>% 
   select(-overall_resilience, -health, -economic, -social, -environmental)
 ```
 
@@ -139,7 +140,8 @@ The indicators teen_pregnancy and asthma are unexpectedly very highly correlated
 # Unsupervised learning
 
 ```{r}
-df = scale(data[,-1])
+csdf = scale(data[,-1])
+rownames(csdf) = data$community
 ```
 
 
@@ -148,7 +150,7 @@ df = scale(data[,-1])
 ### prcomp
 
 ```{r}
-pca1 = prcomp(df)
+pca1 = prcomp(csdf)
 fviz_eig(pca1)
 ```
 
@@ -167,7 +169,7 @@ biplot(pca1)
 
 ```{r}
 set.seed(719)
-fa.parallel(df) # parallel analysis suggests the number of factors = 4, and the number of components = 3
+fa.parallel(csdf) # parallel analysis suggests the number of factors = 4, and the number of components = 3
 ```
 
 ### principal
@@ -193,14 +195,14 @@ Further  methods in unsupervised learning
 
 ```{r}
 # ?fviz_nbclust
-fviz_nbclust(df,
+fviz_nbclust(csdf,
              FUNcluster = kmeans,
              method = "silhouette")
 ```
 
 ```{r}
 set.seed(719)
-km <- kmeans(df, centers = 2)
+km <- kmeans(csdf, centers = 2)
 ```
 
 ```{r}
@@ -222,7 +224,7 @@ data %>%
 
 ```{r, fig.height = 12, fig.width = 14}
 # ?fviz_cluster
-km_vis <- fviz_cluster(list(data = df, cluster = km$cluster),
+km_vis <- fviz_cluster(list(data = csdf, cluster = km$cluster),
                        ellipse.type = "convex", 
                        geom = c("point","text"),
                        labelsize = 10) + 
@@ -234,7 +236,7 @@ km_vis
 # Hierarchical Clustering
 
 ```{r}
-hc.complete <- hclust(dist(scale(data[,-1])), method = "complete")
+hc.complete <- hclust(dist(csdf), method = "complete")
 
 fviz_dend(hc.complete, k = 2,        
           cex = 0.5, 
@@ -249,4 +251,39 @@ ind4.complete <- cutree(hc.complete, 2)
 ```
 
 # variance importance in caret
+
+```{r}
+ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
+
+# ?train
+
+df2 = df %>% 
+  select(-environmental, -social, -health, -economic) %>% 
+  data.frame()
+
+rownames(df2) = df2$community
+
+df2 = df2 %>% 
+  select(-community)
+
+mod1 = train(x = df2[,-1],
+             y = df2[,1],
+                method = "glm",
+                preProcess = c("center","scale"),
+                trControl = ctrl1)
+
+varImp(mod1)
+```
+
+```{r}
+mod2 = train(x = df2[,-1],
+             y = df2[,1],
+                method = "earth",
+                preProcess = c("center","scale"),
+                trControl = ctrl1)
+
+varImp(mod2)
+```
+
+
 
