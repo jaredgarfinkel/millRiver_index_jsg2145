@@ -57,7 +57,9 @@ data = df %>%
 ```{r, fig.height = 12, fig.width = 10}
 M = cor(data[,-1])
 # ?corrplot
+pdf("corrplot_output.pdf")
 corrplot(M, type = c("upper"), order = c("hclust"))
+dev.off()
 ```
 
 There are several race/ethnicity variables that are correlated with each other and economic- and education-related variables.
@@ -106,7 +108,7 @@ for(j in 1:ncol(M)) {
   df2[[j]] = matrify2(pdata = output[[j]])
 }
 
-head(df2)
+# head(df2)
 ```
 
 ```{r}
@@ -116,22 +118,34 @@ union_df = bind_rows(df2) %>%
          "row" = "rname[[i]]")
 ```
 
+```{r}
+head(union_df)
+nrow(union_df)
+```
+
+
 
 ```{r}
 high_df = union_df %>% 
-  filter(r2_value >= 0.7,
+  filter(abs(r2_value) >= 0.7,
          r2_value != 1,
          i < j)
 
-high_df
+pdf("high_corr.pdf")
+high_df %>% 
+  select(row, column, r2_value) %>%
+  rename("Row" = row, "Column" = column, "Pearson-R2" = r2_value) %>% 
+  knitr::kable()
+dev.off()
 ```
 
 
 ```{r}
 very_high_df = union_df %>% 
-  filter(r2_value >= 0.8,
+  filter(abs(r2_value) >= 0.8,
          r2_value != 1,
          i < j)
+
 very_high_df
 ```
 
@@ -183,9 +197,9 @@ fit
 
 ```{r, fig.height = 16, fig.width = 14}
 # ?iclust
-# pdf()
+pdf("iclust_graph.pdf")
 fit2 = iclust(M, plot = TRUE)
-# dev.off()
+dev.off()
 fit2
 ```
 
@@ -216,10 +230,14 @@ output2_df = bind_rows(output2) %>%
 ```
 
 ```{r}
+pdf("2cluster_table.pdf")
 data %>% 
   add_column(cluster = pull(output2_df, cluster)) %>% 
   select(cluster, community) %>% 
-  arrange(cluster)
+  arrange(cluster) %>% 
+  rename("Cluster" = cluster, "Community" = community) %>% 
+  knitr::kable()
+dev.off()
 ```
 
 ```{r, fig.height = 12, fig.width = 14}
@@ -230,14 +248,16 @@ km_vis <- fviz_cluster(list(data = csdf, cluster = km$cluster),
                        labelsize = 10) + 
   labs(title = "K-means") 
 
+# pdf("2cluster_graph.pdf")
 km_vis
+# dev.off()
 ```
 
 # Hierarchical Clustering
 
 ```{r}
 hc.complete <- hclust(dist(csdf), method = "complete")
-
+set.seed(719)
 fviz_dend(hc.complete, k = 2,        
           cex = 0.5, 
           palette = "jco", 
@@ -246,13 +266,14 @@ fviz_dend(hc.complete, k = 2,
           labels_track_height = 2.5)
 
 # ?fviz_dend
-
+pdf("cluster_dendrogram.pdf")
 ind4.complete <- cutree(hc.complete, 2)
+dev.off()
 ```
 
 # variance importance in caret
 
-```{r}
+```{r caret setup}
 ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 # ?train
@@ -265,24 +286,40 @@ rownames(df2) = df2$community
 
 df2 = df2 %>% 
   select(-community)
+```
 
+
+```{r glm in caret}
 mod1 = train(x = df2[,-1],
              y = df2[,1],
                 method = "glm",
                 preProcess = c("center","scale"),
                 trControl = ctrl1)
 
-varImp(mod1)
+varimp1 = varImp(mod1)
+
+pdf("glm_varimp.pdf")
+varimp1$importance %>% 
+  arrange(desc(Overall)) %>% 
+  knitr::kable()
+dev.off()
 ```
 
-```{r}
+```{r gam in caret}
+set.seed(719)
 mod2 = train(x = df2[,-1],
              y = df2[,1],
                 method = "earth",
                 preProcess = c("center","scale"),
                 trControl = ctrl1)
 
-varImp(mod2)
+varimp2 = varImp(mod2)
+
+pdf("gam_varimp.pdf")
+varimp2$importance %>% 
+  arrange(desc(Overall)) %>% 
+  knitr::kable()
+dev.off()
 ```
 
 
